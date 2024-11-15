@@ -1,59 +1,70 @@
-const Car = require('./cars-model')
-
-const vin = require('vin-validator')
+const carsModel = require("./cars-model");
 
 const checkCarId = async (req, res, next) => {
-  try{
-    const car = await Car.getById(req.params.id)
-    if(!car) {
-      next({ status: 404, message: 'not found' })
-    } else {
-      req.car = car
-      next()
+  try {
+    const { id } = req.params;
+    const car = await carsModel.getById(id); // Use the model to check if the car exists
+
+    if (!car) {
+      return res.status(404).json({ message: `Car with id ${id} not found` });
     }
-} catch (err) {
-    next(err)
-}
-}
+
+    req.car = car; // Attach the found car to req.car for use in later middleware or routes
+    next();
+  } catch (error) {
+    res.status(500).json({ message: "Failed to retrieve car" });
+  }
+};
 
 const checkCarPayload = (req, res, next) => {
-  if (!req.body.vin) return next({
-    status: 400,
-    message: 'vin is missing',
-  })
-  if (!req.body.make) return next({
-    status: 400,
-    message: 'make is missing',
-  })
-  if (!req.body.model) return next({
-    status: 400,
-    message: 'model is missing',
-  })
-  if (!req.body.mileage) return next({
-    status: 400,
-    message: 'mileage is missing',
-  })
-  next()
-}
+  const { vin, make, model, mileage } = req.body;
+
+  if (!vin) {
+    return res.status(400).json({ message: "vin is missing" });
+  }
+
+  if (!make) {
+    return res.status(400).json({ message: "make is missing" });
+  }
+
+  if (!model) {
+    return res.status(400).json({ message: "model is missing" });
+  }
+
+  if (!mileage) {
+    return res.status(400).json({ message: "mileage is missing" });
+  }
+
+  next(); // All required fields are present, proceed to the next middleware or route handler
+};
 
 const checkVinNumberValid = (req, res, next) => {
-  if (vin.validate(req.body.vin)) {
-    next()
-  } else {
-    next({ 
-      status: 400, 
-      message: `vin ${req.body.vin} is invalid`,
-    })
+  const { vin } = req.body;
+
+  // Regular expression to validate a VIN (17 characters, no I, O, or Q)
+  const vinRegex = /^[A-HJ-NPR-Z0-9]{17}$/;
+
+  if (!vin || !vinRegex.test(vin)) {
+    return res.status(400).json({ message: `vin ${vin} is invalid` });
   }
-}
 
-const checkVinNumberUnique = (req, res, next) => {
-  next()
-}
+  next(); // VIN is valid, proceed to the next middleware or route handler
+};
 
-module.exports = {
-  checkCarId,
-  checkCarPayload,
-  checkVinNumberValid,
-  checkVinNumberUnique,
-}
+const checkVinNumberUnique = async (req, res, next) => {
+  const { vin } = req.body;
+
+  try {
+    const existingCar = await carsModel.findByVin(vin);
+
+    if (existingCar) {
+      return res.status(400).json({ message: `vin ${vin} already exists` });
+    }
+
+    next(); // VIN is unique, proceed to the next middleware or route handler
+  } catch (error) {
+    res.status(500).json({ message: "Failed to check VIN uniqueness" });
+  }
+};
+
+module.exports = { checkCarId, checkCarPayload, checkVinNumberValid, checkVinNumberUnique };
